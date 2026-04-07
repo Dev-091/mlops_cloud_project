@@ -5,20 +5,37 @@ import os
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-# Initialize MediaPipe Tasks Hand Landmarker
-model_path = os.path.join(os.path.dirname(__file__), "models", "hand_landmarker.task")
-base_options = python.BaseOptions(model_asset_path=model_path)
-options = vision.HandLandmarkerOptions(
-    base_options=base_options,
-    num_hands=1,
-    min_hand_detection_confidence=0.7,
-    min_hand_presence_confidence=0.5,
-)
-# Create detector (initialize only once)
-detector = vision.HandLandmarker.create_from_options(options)
+_detector = None
+
+
+def _get_detector():
+    global _detector
+    if _detector is not None:
+        return _detector
+
+    # Initialize MediaPipe Tasks Hand Landmarker lazily so imports stay safe in CI.
+    model_path = os.path.join(
+        os.path.dirname(__file__), "models", "hand_landmarker.task"
+    )
+    base_options = python.BaseOptions(model_asset_path=model_path)
+    options = vision.HandLandmarkerOptions(
+        base_options=base_options,
+        num_hands=1,
+        min_hand_detection_confidence=0.7,
+        min_hand_presence_confidence=0.5,
+    )
+    try:
+        _detector = vision.HandLandmarker.create_from_options(options)
+    except Exception:
+        _detector = None
+    return _detector
 
 
 def count_fingers(frame):
+    detector = _get_detector()
+    if detector is None:
+        return 0, []
+
     # Convert BGR to RGB for MediaPipe
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
