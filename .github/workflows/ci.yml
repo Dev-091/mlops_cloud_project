@@ -1,0 +1,16 @@
+name: CI/CD Pipeline
+on: [push, pull_request]
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with: { python-version: "3.10" }
+      - run: pip install -r requirements.txt
+      - run: black --check app/
+      - run: flake8 app/ --max-line-length=120
+      - run: pytest tests/
+      - name: Build Docker
+        run: docker build -t ghcr.io/${{ github.repository }}:latest .
