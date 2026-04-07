@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import cv2
-import numpy as np
 from datetime import datetime
 import time
 
@@ -165,7 +164,7 @@ def app_loop():
 
             else:
                 frame_placeholder.error("API Error")
-        except:
+        except Exception:
             frame_placeholder.error("Backend unreachable")
             break
 

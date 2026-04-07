@@ -4,7 +4,6 @@ import time
 import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 from app.detector import count_fingers
