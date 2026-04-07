@@ -1,30 +1,38 @@
 # MLOps Cloud Project
 
-Finger-to-EC2 is a small MLOps demo that detects finger count from a webcam image and uses that count to launch EC2 instances through a FastAPI backend. It also includes a Streamlit frontend for live camera capture and deployment control.
+> Finger-to-EC2 is a hands-on MLOps demo that detects finger counts from a webcam frame, logs inference metrics with MLflow, and can launch EC2 instances based on the result through a FastAPI backend.
 
-## What It Does
+## At a Glance
 
-- Detects hand/finger count from uploaded frames.
-- Logs inference metrics with MLflow.
-- Launches EC2 instances based on the detected count.
-- Provides a Streamlit dashboard for manual or automatic deployment.
+| Layer | Tech |
+| --- | --- |
+| Computer Vision | OpenCV, MediaPipe |
+| API | FastAPI, Uvicorn |
+| Cloud | AWS EC2, Boto3 |
+| MLOps | MLflow |
+| Frontend | Streamlit |
+| Testing | Pytest, Moto |
 
-## Project Structure
+## What You Can Do
 
-- `app/main.py` - FastAPI service with `/health`, `/detect`, and `/auto-scale` endpoints.
-- `app/detector.py` - Finger-counting logic using MediaPipe and OpenCV.
-- `app/ec2_manager.py` - AWS EC2 launch helper.
-- `app/frontend.py` - Streamlit UI for camera capture and deployments.
-- `tests/` - Unit and integration-style tests.
-- `.github/workflows/ci.yml` - CI pipeline for linting, tests, and Docker build.
+- Detect hand or finger count from an uploaded image or webcam frame.
+- Send the detected count to an EC2 autoscaling flow.
+- Track inference latency and deployment events with MLflow.
+- Use a Streamlit dashboard for live camera interaction and manual or automatic deployment.
 
-## Requirements
+## Project Layout
 
-- Python 3.10+ recommended
-- AWS credentials if you want to launch real EC2 instances
-- A webcam for the Streamlit frontend
+| Path | Purpose |
+| --- | --- |
+| `app/main.py` | FastAPI service with `/health`, `/detect`, and `/auto-scale` endpoints |
+| `app/detector.py` | Finger-counting logic powered by MediaPipe and OpenCV |
+| `app/ec2_manager.py` | EC2 launch helper with dry-run validation |
+| `app/frontend.py` | Streamlit interface for camera capture and deployment control |
+| `app/mlflow_setup.py` | MLflow logging utilities |
+| `tests/` | Unit and integration-style tests |
+| `.github/workflows/ci.yml` | CI pipeline for linting, tests, and Docker build |
 
-## Setup
+## Quick Start
 
 ```powershell
 python -m venv venv
@@ -32,9 +40,9 @@ venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-## Environment Variables
+## Configure Environment
 
-Create a `.env` file if you plan to use AWS features:
+Create a `.env` file if you want to use AWS-backed deployment:
 
 ```env
 AWS_DEFAULT_REGION=us-east-1
@@ -44,29 +52,29 @@ AUTO_TERMINATE_MINUTES=30
 MAX_INSTANCES=2
 ```
 
-Keep secrets like AWS access keys out of version control.
+Keep cloud credentials and other secrets out of version control.
 
-## Run The Backend
+## Run the Backend
 
 ```powershell
 uvicorn app.main:app --reload
 ```
 
-API endpoints:
+Available API endpoints:
 
 - `GET /health`
 - `POST /detect`
 - `POST /auto-scale`
 
-## Run The Frontend
+## Run the Frontend
 
 ```powershell
 streamlit run app/frontend.py
 ```
 
-The frontend expects the FastAPI backend to be available at `http://localhost:8000`.
+The frontend expects the API to be available at `http://localhost:8000`.
 
-## Tests
+## Run Tests
 
 ```powershell
 pytest
@@ -88,5 +96,6 @@ docker compose up --build
 
 ## Notes
 
-- `mlruns/`, `mlflow.db`, `venv/`, and `.env` are ignored so local artifacts and secrets are not published.
-- The EC2 launch flow uses a dry-run first and then performs the real launch when permissions allow it.
+- `mlruns/`, `mlflow.db`, `venv/`, and `.env` are ignored so local artifacts and secrets stay out of GitHub.
+- The EC2 launch flow performs a dry-run first, then launches for real when permissions and quotas allow it.
+- The UI is designed to support both manual deployment and auto-deploy behavior from the detected finger count.
