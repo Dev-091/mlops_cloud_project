@@ -13,12 +13,15 @@ from app.mlflow_setup import log_inference
 
 app = FastAPI(title="Finger-to-EC2 MLOps API")
 
+
 class InstanceRequest(BaseModel):
     count: int
+
 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "finger-ec2-mlops"}
+
 
 @app.post("/detect")
 async def detect_fingers(file: UploadFile = File(...)):
@@ -35,13 +38,14 @@ async def detect_fingers(file: UploadFile = File(...)):
         log_inference(-1, -1, "error")
         raise HTTPException(400, str(e))
 
+
 @app.post("/auto-scale")
 async def auto_scale(req: InstanceRequest):
     count = max(1, min(req.count, int(os.getenv("MAX_INSTANCES", "2"))))
     start_time = time.time()
     instance_ids = []
     status = "success"
-    
+
     try:
         result = launch_ec2_instances(count)
         instance_ids = result.get("instance_ids", [])
@@ -52,6 +56,7 @@ async def auto_scale(req: InstanceRequest):
         latency = round((time.time() - start_time) * 1000, 2)
         log_inference(count, latency, "failed", [])
         raise HTTPException(500, str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

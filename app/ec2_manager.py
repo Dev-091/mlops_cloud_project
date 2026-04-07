@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 ec2 = boto3.client("ec2", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
 
+
 def launch_ec2_instances(count: int):
     image_id = os.getenv("EC2_IMAGE_ID", "ami-0c55b159cbfafe1f0")
     instance_type = os.getenv("EC2_INSTANCE_TYPE", "t2.micro")
@@ -26,7 +27,7 @@ sudo shutdown -h now
             MinCount=count,
             MaxCount=count,
             UserData=user_data,
-            DryRun=True
+            DryRun=True,
         )
         print("✅ Dry-run passed. Proceeding to launch.")
     except ClientError as e:
@@ -41,7 +42,7 @@ sudo shutdown -h now
         InstanceType=instance_type,
         MinCount=count,
         MaxCount=count,
-        UserData=user_data
+        UserData=user_data,
     )
 
     instance_ids = [i["InstanceId"] for i in response["Instances"]]
@@ -49,5 +50,5 @@ sudo shutdown -h now
         "status": "launching",
         "count": count,
         "instance_ids": instance_ids,
-        "auto_terminate_minutes": auto_stop_min
+        "auto_terminate_minutes": auto_stop_min,
     }
