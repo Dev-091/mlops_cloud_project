@@ -13,7 +13,7 @@ def _get_detector():
     if _detector is not None:
         return _detector
 
-    # Initialize MediaPipe Tasks Hand Landmarker lazily so imports stay safe in CI.
+    # Initialize MediaPipe Tasks Hand Landmarker lazily
     model_path = os.path.join(
         os.path.dirname(__file__), "models", "hand_landmarker.task"
     )
@@ -21,8 +21,8 @@ def _get_detector():
     options = vision.HandLandmarkerOptions(
         base_options=base_options,
         num_hands=1,
-        min_hand_detection_confidence=0.7,
-        min_hand_presence_confidence=0.5,
+        min_hand_detection_confidence=0.6,
+        min_hand_presence_confidence=0.6,
     )
     try:
         _detector = vision.HandLandmarker.create_from_options(options)
@@ -36,8 +36,15 @@ def count_fingers(frame):
     if detector is None:
         return 0, []
 
-    # Convert BGR to RGB for MediaPipe
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # Pre-resize for faster detection
+    h, w, _ = frame.shape
+    if w > 640:
+        scale = 640 / w
+        frame_proc = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
+    else:
+        frame_proc = frame
+
+    frame_rgb = cv2.cvtColor(frame_proc, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
     # Process hand landmarks
@@ -47,30 +54,35 @@ def count_fingers(frame):
     landmarks = []
 
     if detection_result.hand_landmarks:
-        # Results are a list of hand landmarks (one for each detected hand)
-        for hand_landmarks in detection_result.hand_landmarks:
-            # We map landmarks back to pixel coordinates for display and calculation
-            h, w, _ = frame.shape
+        for i, hand_landmarks in enumerate(detection_result.hand_landmarks):
+            # Get handedness (Left or Right)
+            handedness = detection_result.handedness[i][0].category_name
+            
+            h_proc, w_proc, _ = frame_proc.shape
             lm_list = []
             for id, lm in enumerate(hand_landmarks):
-                cx, cy = int(lm.x * w), int(lm.y * h)
+                cx, cy = int(lm.x * w_proc), int(lm.y * h_proc)
                 lm_list.append((id, cx, cy))
 
-            # Finger detection logic (Extended fingers)
-            # Tip indices: Thumb (4), Index (8), Middle (12), Ring (16), Pinky (20)
-            # PIP indices for comparison: Thumb (3), Index (6), Middle (10), Ring (14), Pinky (18)
-            tips = [4, 8, 12, 16, 20]
-            pips = [3, 6, 10, 14, 18]
+            # Finger detection logic (Robust)
+            if handedness == "Right":
+                if lm_list[4][0] < lm_list[3][0]: # Thumb
+                    count += 1
+            else: # Left hand
+                if lm_list[4][0] > lm_list[3][0]: # Thumb
+                    count += 1
 
-            for tip, pip in zip(tips, pips):
-                if tip == 4:  # Thumb
-                    # Simple X-axis check for thumb extension (depends on hand side/orientation)
-                    if lm_list[tip][1] < lm_list[pip][1]:
-                        count += 1
-                else:  # Other fingers
-                    # Compare Y-axis (lower value is higher on screen)
-                    if lm_list[tip][2] < lm_list[pip][2]:
-                        count += 1
-            landmarks = lm_list
+            # Other fingers: Check if tip is above the PIP joint
+            for tip, pip in [(8, 6), (12, 10), (16, 14), (20, 18)]:
+                if lm_list[tip][2] < lm_list[pip][2]:
+                    count += 1
+            
+            # Scale landmarks back for display
+            display_lms = []
+            scale_x = w / w_proc
+            scale_y = h / h_proc
+            for id, x, y in lm_list:
+                display_lms.append((id, int(x * scale_x), int(y * scale_y)))
+            landmarks = display_lms
 
     return count, landmarks

@@ -3,200 +3,248 @@ import requests
 import cv2
 from datetime import datetime
 import time
+import os
 
-# Set a professional wide layout
-st.set_page_config(page_title="Finger-to-EC2 Ops", page_icon="☁️", layout="wide")
+try:
+    from app.detector import count_fingers
+except ImportError:
+    from detector import count_fingers
 
-# Custom CSS for a beautiful look
-st.markdown(
-    """
+# --- PAGE CONFIG ---
+st.set_page_config(
+    page_title="OpsVision | Cloud Controller",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# --- PREMIUM CSS ---
+st.markdown("""
 <style>
-    .main-header {
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
-        color: #1e3a8a;
-        font-weight: 700;
-        text-align: center;
-        padding-bottom: 2rem;
     }
-    .metric-card {
-        background-color: #f8fafc;
-        border-radius: 10px;
+    
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #f8fafc;
+    }
+    
+    /* Glassmorphism Title */
+    .header-container {
         padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        border: 1px solid #e2e8f0;
-        margin-bottom: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 2rem;
+        text-align: center;
     }
-    .status-text {
-        color: #059669;
-        font-weight: 600;
+    
+    .main-title {
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin: 0;
     }
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: all 0.3s ease;
+    
+    /* Metrics Styling */
+    [data-testid="stMetricValue"] {
+        font-size: 2.5rem !important;
+        font-weight: 700 !important;
+        color: #38bdf8 !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #94a3b8 !important;
+        font-size: 1rem !important;
+    }
+
+    /* History Cards */
+    .history-card {
+        background: rgba(30, 41, 59, 0.5);
+        border-radius: 12px;
+        padding: 1rem;
+        border-left: 4px solid #38bdf8;
+        margin-bottom: 0.8rem;
+    }
+    
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0f172a !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-st.markdown(
-    "<h1 class='main-header'>🖐️ Finger-to-EC2 Ops Console</h1>", unsafe_allow_html=True
-)
-
+# --- CONSTANTS ---
 API_URL = "http://localhost:8000"
 
-# Initialize Session State
-if "launch_history" not in st.session_state:
-    st.session_state.launch_history = []
-if "total_launched" not in st.session_state:
-    st.session_state.total_launched = 0
-if "last_auto_deploy_time" not in st.session_state:
-    st.session_state.last_auto_deploy_time = 0
-if "detected_count" not in st.session_state:
-    st.session_state.detected_count = 0
+# --- STATE INITIALIZATION ---
+def init_state():
+    state_mapping = {
+        "launch_history": [],
+        "total_launched": 0,
+        "last_auto_deploy_time": 0,
+        "detected_count": 0,
+        "system_status": "Ready",
+        "api_healthy": False
+    }
+    for key, val in state_mapping.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
 
-col1, col2 = st.columns([1.5, 1])
+init_state()
 
-
+# --- BACKEND HELPERS ---
 def handle_deploy(count):
     if count <= 0:
+        st.warning("No fingers detected! Please show your gesture.")
         return False
     try:
-        launch_resp = requests.post(f"{API_URL}/auto-scale", json={"count": count})
-        if launch_resp.status_code == 200:
-            launch_data = launch_resp.json()
+        resp = requests.post(f"{API_URL}/auto-scale", json={"count": count}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
             rec = {
                 "time": datetime.now().strftime("%I:%M:%S %p"),
-                "count": launch_data.get("count", 0),
-                "ids": ", ".join(launch_data.get("instance_ids", [])),
-                "status": launch_data.get("status", "success"),
+                "count": data.get("count", 0),
+                "ids": ", ".join(data.get("instance_ids", [])),
             }
             st.session_state.launch_history.insert(0, rec)
             st.session_state.total_launched += rec["count"]
+            st.session_state.system_status = f"Success: {rec['count']} Deployed"
+            st.toast(f"✅ Mission Success: {rec['count']} Instances Online")
             return True
-        else:
-            st.error(f"Launch failed: {launch_resp.text}")
-            return False
+        st.error(f"Backend Error: {resp.text}")
     except Exception as e:
-        st.error(f"Error: {e}")
-        return False
+        st.error(f"Connection Failed: {e}")
+    return False
 
+# --- UI HEADER ---
+with st.container():
+    st.markdown("""
+        <div class="header-container">
+            <h1 class="main-title">OpsVision Controller</h1>
+            <p style="color: #64748b; margin-top: 5px;">⚡ Cloud Automation & Gesture Intel</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-with col1:
-    st.subheader("📷 Live Camera Feed")
-    run_camera = st.toggle("Activate Tracking Camera", value=False, key="run_cam")
-    auto_deploy = st.toggle("⚡ Enable Auto Deploy Mode", value=False, key="auto_dep")
+# --- SIDEBAR CONTROLS ---
+with st.sidebar:
+    st.image("https://img.icons8.com/isometric/512/cloud-checked.png", width=120)
+    st.title("Control Center")
+    st.divider()
+    
+    run_camera = st.toggle("🎥 Vision System", value=False)
+    auto_deploy = st.toggle("🤖 Autonomous Mode", value=False)
+    
+    st.divider()
+    
+    # RELOCATED ACTION BUTTON: Always clickable if camera is on
+    st.subheader("Action Manual")
+    
+    # We use a static label but handle the count from session state inside the function
+    # This prevents the button from being "stuck" due to loop-blocking
+    deploy_btn = st.button(
+        "🚀 Deploy Gesture",
+        disabled=(not run_camera),
+        use_container_width=True,
+        type="primary",
+        help="Launches instances based on the current finger gesture detected."
+    )
+    
+    if deploy_btn:
+        eff_count = min(st.session_state.detected_count, 2)
+        handle_deploy(eff_count)
+        # Note: We don't call st.rerun here as the button click already triggered it
+        # The script will continue to the end and restart.
 
-    frame_placeholder = st.empty()
-    status_placeholder = st.empty()
+    st.divider()
+    st.info(f"**Status:** {st.session_state.system_status}")
 
-    # Manual Deploy Button (Outside the loop to avoid Duplicate ID error)
-    if not auto_deploy:
-        if st.button(
-            f"🚀 Deploy {st.session_state.detected_count} Instance(s)",
-            key="manual_deploy",
-            type="primary",
-        ):
-            if handle_deploy(st.session_state.detected_count):
-                st.rerun()
+# --- MAIN DASHBOARD LAYOUT ---
+col_vision, col_ops = st.columns([1.6, 1])
 
+with col_vision:
+    st.markdown("### 👁️ Vision Intelligence")
+    vision_frame = st.empty()
+    if not run_camera:
+        vision_frame.image("https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=640", use_container_width=True, caption="Vision system offline")
 
-def app_loop():
+with col_ops:
+    st.markdown("### 📊 Operational Ops")
+    
+    # Metrics Row
+    m_col1, m_col2 = st.columns(2)
+    m_col1.metric("Active Assets", st.session_state.total_launched)
+    
+    # Targeting metric that updates live
+    targeting_val = min(st.session_state.detected_count, 2)
+    m_col2.metric("Targeting", f"{targeting_val} Unit" if targeting_val > 0 else "None")
+    
+    st.markdown("#### 📜 Launch Log")
+    log_container = st.container(height=350)
+    if not st.session_state.launch_history:
+        log_container.caption("No recent operations found.")
+    for record in st.session_state.launch_history:
+        with log_container:
+            st.markdown(f"""
+                <div class="history-card">
+                    <span style="font-size: 0.8rem; color: #94a3b8;">{record['time']}</span><br>
+                    <strong>Deployed {record['count']} Instance(s)</strong><br>
+                    <code style="font-size: 0.7rem;">{record['ids'][:40]}...</code>
+                </div>
+            """, unsafe_allow_html=True)
+
+# --- COMPUTER VISION LOOP ---
+def main_vision_loop():
     cap = cv2.VideoCapture(0)
-    auto_deploy_cooldown = 10  # seconds
-
-    while st.session_state.run_cam and cap.isOpened():
+    # Default camera settings for speed
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    
+    cooldown = 10
+    frame_n = 0
+    
+    while run_camera and cap.isOpened():
         ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Send frame for detection
-        _, encoded = cv2.imencode(".jpg", frame)
-        try:
-            resp = requests.post(
-                f"{API_URL}/detect",
-                files={"file": ("img.jpg", encoded.tobytes(), "image/jpeg")},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                count = data["finger_count"]
-                st.session_state.detected_count = (
-                    count  # Update session state for the manual button
-                )
-
-                # Visuals
-                cv2.putText(
-                    frame,
-                    f"Fingers: {count}",
-                    (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.2,
-                    (0, 255, 100),
-                    3,
-                )
-                frame_placeholder.image(frame, channels="BGR", use_container_width=True)
-
-                # Auto Deploy Logic
-                if auto_deploy and count > 0:
-                    current_time = time.time()
-                    if (
-                        current_time - st.session_state.last_auto_deploy_time
-                    ) > auto_deploy_cooldown:
-                        status_placeholder.warning(
-                            f"⚡ Auto-Triggering {count} instances!"
-                        )
-                        if handle_deploy(count):
-                            st.session_state.last_auto_deploy_time = current_time
-                            # We can't st.rerun here as it kills the loop process
-                            # But the state is updated, so next loop or interaction will show it.
-                    else:
-                        wait = int(
-                            auto_deploy_cooldown
-                            - (current_time - st.session_state.last_auto_deploy_time)
-                        )
-                        status_placeholder.info(
-                            f"Targeting {count} | Cooldown: {wait}s"
-                        )
-                else:
-                    status_placeholder.empty()
-
-            else:
-                frame_placeholder.error("API Error")
-        except Exception:
-            frame_placeholder.error("Backend unreachable")
-            break
-
-        time.sleep(0.05)
-
+        if not ret: break
+        
+        frame_n += 1
+        if frame_n % 2 == 0:
+            count, landmarks = count_fingers(frame)
+            st.session_state.detected_count = count
+            
+            # Interactive feedback in UI
+            for _, cx, cy in landmarks:
+                cv2.circle(frame, (cx, cy), 4, (248, 189, 56), -1) 
+                
+        # Simple Overlay for Camera
+        cv2.rectangle(frame, (10, 10), (220, 60), (15, 23, 42), -1)
+        cv2.putText(frame, f"G-ID: {st.session_state.detected_count}", (20, 45), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (56, 189, 248), 2)
+        
+        vision_frame.image(frame, channels="BGR", use_container_width=True)
+        
+        # Autonomous Logic (Only if Mode is ON and detection is > 0)
+        if auto_deploy and st.session_state.detected_count > 0:
+            now = time.time()
+            if (now - st.session_state.last_auto_deploy_time) > cooldown:
+                eff = min(st.session_state.detected_count, 2)
+                if handle_deploy(eff):
+                    st.session_state.last_auto_deploy_time = now
+        
+        # This small sleep allows Streamlit to process UI events (like button clicks)
+        time.sleep(0.01)
+    
     cap.release()
 
-
-with col2:
-    st.subheader("📊 Deployment Overview")
-    st.markdown(
-        f"""
-    <div class="metric-card">
-        <h4 style="margin: 0; color: #475569;">Total Servers Deployed</h4>
-        <h1 style="margin: 0; color: #2563eb; font-size: 3rem;">{st.session_state.total_launched}</h1>
-        <span class="status-text">● System operational</span>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    st.subheader("🕒 Launch History")
-    history_container = st.container(height=500)
-    for idx, record in enumerate(st.session_state.launch_history):
-        with history_container.expander(
-            f"Deploy [{record['time']}] - {record['count']} instance(s)",
-            expanded=(idx == 0),
-        ):
-            st.code(f"Instance IDs:\n{record['ids']}", language="text")
-
-# Execution Entry Point
 if run_camera:
-    app_loop()
-else:
-    frame_placeholder.info("Ready. Activate camera to start.")
+    main_vision_loop()
+    # If the loop ends (e.g. user toggles off), we rerun to clear the vision_frame
+    st.rerun()
