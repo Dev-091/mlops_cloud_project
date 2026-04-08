@@ -57,7 +57,7 @@ def count_fingers(frame):
         for i, hand_landmarks in enumerate(detection_result.hand_landmarks):
             # Get handedness (Left or Right)
             handedness = detection_result.handedness[i][0].category_name
-            
+
             h_proc, w_proc, _ = frame_proc.shape
             lm_list = []
             for id, lm in enumerate(hand_landmarks):
@@ -66,17 +66,17 @@ def count_fingers(frame):
 
             # Finger detection logic (Robust)
             if handedness == "Right":
-                if lm_list[4][0] < lm_list[3][0]: # Thumb
+                if lm_list[4][0] < lm_list[3][0]:  # Thumb
                     count += 1
-            else: # Left hand
-                if lm_list[4][0] > lm_list[3][0]: # Thumb
+            else:  # Left hand
+                if lm_list[4][0] > lm_list[3][0]:  # Thumb
                     count += 1
 
             # Other fingers: Check if tip is above the PIP joint
             for tip, pip in [(8, 6), (12, 10), (16, 14), (20, 18)]:
                 if lm_list[tip][2] < lm_list[pip][2]:
                     count += 1
-            
+
             # Scale landmarks back for display
             display_lms = []
             scale_x = w / w_proc
